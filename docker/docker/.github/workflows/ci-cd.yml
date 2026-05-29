@@ -1,0 +1,43 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker images
+        run: |
+          docker compose -f docker/docker-compose.yml build
+
+      - name: Run containers
+        run: |
+          docker compose -f docker/docker-compose.yml up -d
+
+      - name: Health Check
+        run: |
+          echo "Waiting for services to start..."
+          sleep 15
+          curl -f http://localhost:8080/health || exit 1
+          echo "✅ RPC Proxy is healthy!"
+
+      - name: Test RPC Endpoint
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+            --data '{"jsonrpc":"2.0","method":"net_version","params":[],"id":1}' \
+            http://localhost:8080
+
+      - name: Stop containers
+        if: always()
+        run: docker compose -f docker/docker-compose.yml down
